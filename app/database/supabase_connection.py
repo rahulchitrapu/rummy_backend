@@ -2,21 +2,27 @@ from supabase import create_client, Client
 from flask import current_app
 import logging
 
+from app.config import Config
+
 logger = logging.getLogger(__name__)
 
 class SupabaseDB:
     client: Client = None
+    db = None 
 
-def init_db(app):
+def init_db():
     """Initialize Supabase connection"""
     try:
-        url = app.config['SUPABASE_URL']
-        key = app.config['SUPABASE_KEY']
+        url = Config.SUPABASE_URL
+        key = Config.SUPABASE_KEY
         
         if not url or not key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be configured")
         
         SupabaseDB.client = create_client(url, key)
+
+            # Set schema client
+        SupabaseDB.db = SupabaseDB.client.schema("squards")
         
         # Test connection by trying to authenticate or query a simple table
         # You can replace this with a simple query to an existing table
@@ -29,20 +35,27 @@ def init_db(app):
 
 def get_client():
     """Get Supabase client instance"""
-    return SupabaseDB.client
+    return SupabaseDB.db.client
 
-def get_table(table_name):
+def get_table(table_name, columns="*",filters={}):
     """Get specific table"""
-    return SupabaseDB.client.table(table_name)
+    
+    query = SupabaseDB.db.table(table_name).select(columns)
+
+    if filters:
+        for key, value in filters.items():
+            query = query.eq(key, value)
+
+    return query.execute().data
 
 # Table helper functions
 def get_users_table():
     """Get users table"""
     return get_table('users')
 
-def get_rooms_table():
+def get_rooms_table(columns="*",filters={}):
     """Get rooms table"""
-    return get_table('rooms')
+    return get_table('rooms',columns=columns,filters=filters)
 
 def get_games_table():
     """Get games table"""
@@ -52,7 +65,7 @@ def get_games_table():
 def insert_record(table_name, data):
     """Insert a record into a table"""
     try:
-        response = SupabaseDB.client.table(table_name).insert(data).execute()
+        response = SupabaseDB.db.table(table_name).insert(data).execute()
         return response
     except Exception as e:
         logger.error(f'Error inserting record into {table_name}: {e}')
@@ -61,7 +74,7 @@ def insert_record(table_name, data):
 def update_record(table_name, data, filters):
     """Update records in a table"""
     try:
-        query = SupabaseDB.client.table(table_name).update(data)
+        query = SupabaseDB.db.table(table_name).update(data)
         
         # Apply filters
         for column, value in filters.items():
@@ -76,7 +89,7 @@ def update_record(table_name, data, filters):
 def select_records(table_name, columns="*", filters=None, limit=None):
     """Select records from a table"""
     try:
-        query = SupabaseDB.client.table(table_name).select(columns)
+        query = SupabaseDB.db.table(table_name).select(columns)
         
         # Apply filters if provided
         if filters:
@@ -96,7 +109,7 @@ def select_records(table_name, columns="*", filters=None, limit=None):
 def delete_record(table_name, filters):
     """Delete records from a table"""
     try:
-        query = SupabaseDB.client.table(table_name).delete()
+        query = SupabaseDB.db.table(table_name).delete()
         
         # Apply filters
         for column, value in filters.items():
@@ -107,3 +120,9 @@ def delete_record(table_name, filters):
     except Exception as e:
         logger.error(f'Error deleting record from {table_name}: {e}')
         raise
+
+
+if __name__ == "__main__":
+    print("initialising db")
+    init_db()
+    print(" db initilised")

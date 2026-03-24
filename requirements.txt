@@ -16,6 +16,7 @@ dnspython==2.8.0
 eventlet==0.33.3
 fastapi==0.123.3
 Flask==2.3.2
+Flask-CORS==5.0.0
 Flask-SocketIO==5.3.4
 fsspec==2026.2.0
 greenlet==3.2.4
