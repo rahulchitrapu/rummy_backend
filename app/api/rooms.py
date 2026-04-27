@@ -6,13 +6,21 @@ import string
 from app.config import Config
 import logging
 
-from app.database.supabase_connection import get_rooms_table, get_table, insert_record
+from app.database.supabase_connection import delete_record, get_rooms_table, get_table, insert_record, update_record
 
 logger = logging.getLogger(__name__)
 rooms_bp = Blueprint('rooms', __name__)
 
 # In-memory storage for active games
 active_games = {}
+
+
+def is_duplicate_room_player_error(error):
+    error_message = str(error)
+    return (
+        "room_players_room_id_user_id_key" in error_message
+        or "duplicate key value violates unique constraint" in error_message
+    )
 
 def generate_room_code():
     """Generate random room code"""
@@ -132,7 +140,7 @@ def update_room(room_id):
 @rooms_bp.route('/<room_id>', methods=['DELETE'])
 def delete_room(room_id):
     try:
-       
+        delete_record("rooms", filters={"id": room_id})
         
         return jsonify({'message': 'Room deleted'})
         
@@ -143,19 +151,41 @@ def delete_room(room_id):
 @rooms_bp.route('/join/<int:room_id>', methods=['POST'])
 def join_room(room_id):
     try:
-        room = get_rooms_table(columns="room_code,id",filters={"id":room_id})[0]
+        
 
         joining_code = request.json.get('room_code')
-        player_id = request.json.get('player_id')
+        user_id = request.json.get('user_id')
+
+        if not joining_code or not user_id:
+            return jsonify({'error': 'room_code and user_id required'}), 400
+
+        room = get_rooms_table(columns="room_code,id",filters={"id":room_id})[0]
+        
+        # checking the code
         if room['room_code'] != joining_code:
             return jsonify({'error': 'Invalid room code'}), 400
         
 
-        insert_record("room_players",{
-            "room_id": room["id"],
-            "user_id": player_id,
-            "is_host": False
-        })
+        # Check if user is already in the room
+        existing_player = get_table(
+            "room_players",
+            columns="id",
+            filters={"room_id": room["id"], "user_id": user_id}
+        )
+
+        if existing_player:
+            return jsonify({'message': 'User already exists in the room'}), 200
+        
+        try:
+            insert_record("room_players",{
+                "room_id": room["id"],
+                "user_id": user_id,
+                "is_host": False
+            })
+        except Exception as insert_error:
+            if is_duplicate_room_player_error(insert_error):
+                return jsonify({'message': 'User already exists in the room'}), 200
+            raise insert_error
 
         
         
@@ -166,22 +196,23 @@ def join_room(room_id):
         return jsonify({'error': 'Failed to join room'}), 500
 
 # POST /api/rooms/leave - Leave room
-@rooms_bp.route('/leave', methods=['POST'])
-def leave_room():
+@rooms_bp.route('/leave/<int:room_id>', methods=['POST'])
+def leave_room(room_id):
     try:
         data = request.get_json()
-        room_id = data.get('room_id')
-        player_id = data.get('player_id')
+       
+        user_id = data.get('user_id')
+
         
-        if not room_id or not player_id:
-            return jsonify({'error': 'room_id and player_id required'}), 400
         
-        # Remove player from room
-        get_rooms_collection().update_one(
-            {'_id': ObjectId(room_id)},
-            {'$pull': {'players': {'user_id': ObjectId(player_id)}}}
-        )
-        
+        if not room_id or not user_id:
+            return jsonify({'error': 'room_id and user_id required'}), 400
+          
+        delete_record("room_players",filters={
+            "room_id": room_id,
+            "user_id": user_id
+        })
+
         return jsonify({'message': 'Left room successfully'})
         
     except Exception as e:

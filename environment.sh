@@ -1,4 +1,4 @@
-source ./venv/bin/activate
+source /venv/bin/activate
 export FLASK_APP=app.main
 export FLASK_ENV=development
 

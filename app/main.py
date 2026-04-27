@@ -11,30 +11,24 @@ from app.database.supabase_connection import init_db as init_supabase_db
 from app.sockets import events
 from app.api.users import users_bp
 from app.api.rooms import rooms_bp
+from app.api.ping import ping_bp
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
     # Enable CORS for all routes
-    # CORS(app, resources={
-    #     r"/api/*": {
-    #         "origins": "*",
-    #         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    #         "allow_headers": ["Content-Type", "Authorization"]
-    #     }
-    # })
-
     CORS(app, supports_credentials=True)
     
     # Initialize Socket.IO
     socketio = SocketIO(app, cors_allowed_origins="*")
     
     # Initialize database
-    init_db(app)
+    # init_db(app)
     init_supabase_db()
     
     # Register blueprints
+    app.register_blueprint(ping_bp, url_prefix='/ping')
     app.register_blueprint(users_bp, url_prefix='/api/users')
     app.register_blueprint(rooms_bp, url_prefix='/api/rooms')
     

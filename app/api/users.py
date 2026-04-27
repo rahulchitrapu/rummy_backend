@@ -146,11 +146,14 @@ def update_user(user_id):
             if len(data['password']) < 6:
                 return jsonify({'error': 'Password too short'}), 400
             update_fields['password'] = generate_password_hash(data['password'])
-        
+
         if update_fields:
             update_record('users', update_fields, {'id': user_id})
+
+        updated_user = select_records('users', 'id,name,email,created_at', {'id': user_id})
+        updated_record = updated_user.data[0] if updated_user.data else None
         
-        return jsonify({'message': 'User updated'})
+        return jsonify({'message': 'User updated', 'user': updated_record})
         
     except Exception as e:
         return jsonify({'error': 'Failed to update user'}), 500
