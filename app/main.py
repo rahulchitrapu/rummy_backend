@@ -21,7 +21,7 @@ def create_app():
     CORS(app, supports_credentials=True)
     
     # Initialize Socket.IO
-    socketio = SocketIO(app, cors_allowed_origins="*")
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
     
     # Initialize database
     # init_db(app)
@@ -38,6 +38,11 @@ def create_app():
     
     return app, socketio
 
+# Module-level app/socketio so a production WSGI server (gunicorn) can import
+# `app.main:app` directly instead of only running via `python app/main.py`.
+app, socketio = create_app()
+
 if __name__ == '__main__':
-    app, socketio = create_app()
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    socketio.run(app, debug=debug, host='0.0.0.0', port=port)
