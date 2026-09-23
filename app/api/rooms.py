@@ -23,16 +23,14 @@ def is_duplicate_room_player_error(error):
     )
 
 def generate_room_code():
-    """Generate random room code"""
-    characters = string.ascii_uppercase + string.digits
-
+    """Generate random 6-digit room code, unique among active rooms"""
     while True:
-        code = ''.join(secrets.choice(characters) for _ in range(8))
+        code = ''.join(secrets.choice(string.digits) for _ in range(6))
 
         existing = get_table(
             "rooms",
             columns="id",
-            filters={"room_code": code}
+            filters={"room_code": code, "status": "active"}
         )
 
         if not existing:
@@ -148,63 +146,99 @@ def delete_room(room_id):
         return jsonify({'error': 'Failed to delete room'}), 500
 
 # POST /api/rooms/join - Join room
-@rooms_bp.route('/join/<int:room_id>', methods=['POST'])
-def join_room(room_id):
+@rooms_bp.route('/join', methods=['POST'])
+def join_room():
     try:
-        
-
         joining_code = request.json.get('room_code')
         user_id = request.json.get('user_id')
 
         if not joining_code or not user_id:
             return jsonify({'error': 'room_code and user_id required'}), 400
 
-        room = get_rooms_table(columns="room_code,id",filters={"id":room_id})[0]
-        
-        # checking the code
-        if room['room_code'] != joining_code:
+        rooms = get_rooms_table(
+            columns="id, room_code, status, max_players, created_by",
+            filters={"room_code": joining_code}
+        )
+
+        if not rooms:
             return jsonify({'error': 'Invalid room code'}), 400
-        
+
+        room = rooms[0]
 
         # Check if user is already in the room
         existing_player = get_table(
             "room_players",
-            columns="id",
+            columns="id, room_id, user_id, is_host, is_ready, score, joined_at",
             filters={"room_id": room["id"], "user_id": user_id}
         )
 
         if existing_player:
-            return jsonify({'message': 'User already exists in the room'}), 200
-        
+            return jsonify({
+                'message': 'User already exists in the room',
+                'room': room,
+                'room_player': existing_player[0]
+            }), 200
+
         try:
             insert_record("room_players",{
                 "room_id": room["id"],
                 "user_id": user_id,
-                "is_host": False
+                "is_host": user_id == room["created_by"]
             })
         except Exception as insert_error:
             if is_duplicate_room_player_error(insert_error):
-                return jsonify({'message': 'User already exists in the room'}), 200
+                existing_player = get_table(
+                    "room_players",
+                    columns="id, room_id, user_id, is_host, is_ready, score, joined_at",
+                    filters={"room_id": room["id"], "user_id": user_id}
+                )
+                return jsonify({
+                    'message': 'User already exists in the room',
+                    'room': room,
+                    'room_player': existing_player[0] if existing_player else None
+                }), 200
             raise insert_error
 
-        
-        
-        return jsonify({'message': 'Joined room successfully'})
+        return jsonify({'message': 'Joined room successfully', 'room': room})
         
     except Exception as e:
         logger.error(f'Join room error: {e}')
         return jsonify({'error': 'Failed to join room'}), 500
 
+# GET /api/rooms/user/<user_id>/ - Get active games for a user
+@rooms_bp.route('/user/<int:user_id>/', methods=['GET'])
+def get_active_rooms_for_user(user_id):
+    try:
+        player_rooms = get_table(
+            "room_players",
+            columns="is_host, room:rooms(id, room_code, status, max_players, created_by, member_count)",
+            filters={"user_id": user_id}
+        )
+
+        active_rooms = []
+        for pr in player_rooms:
+            room = pr.get("room")
+            if not room or room.get("status") not in ("active", "waiting"):
+                continue
+
+            room["is_host"] = pr.get("is_host", False)
+            active_rooms.append(room)
+
+        return jsonify({"rooms": active_rooms})
+
+    except Exception as e:
+        logger.error(f'Get active rooms error: {e}')
+        return jsonify({'error': 'Failed to get active rooms'}), 500
+
 # POST /api/rooms/leave - Leave room
-@rooms_bp.route('/leave/<int:room_id>', methods=['POST'])
-def leave_room(room_id):
+@rooms_bp.route('/leave', methods=['POST'])
+def leave_room():
     try:
         data = request.get_json()
-       
+
+        room_id = data.get('room_id')
         user_id = data.get('user_id')
 
-        
-        
         if not room_id or not user_id:
             return jsonify({'error': 'room_id and user_id required'}), 400
           

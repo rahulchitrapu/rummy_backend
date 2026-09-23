@@ -11,6 +11,7 @@ from app.database.supabase_connection import init_db as init_supabase_db
 from app.sockets import events
 from app.api.users import users_bp
 from app.api.rooms import rooms_bp
+from app.api.games import games_bp
 from app.api.ping import ping_bp
 
 def create_app():
@@ -31,7 +32,8 @@ def create_app():
     app.register_blueprint(ping_bp, url_prefix='/ping')
     app.register_blueprint(users_bp, url_prefix='/api/users')
     app.register_blueprint(rooms_bp, url_prefix='/api/rooms')
-    
+    app.register_blueprint(games_bp, url_prefix='/api/games')
+
     
     # Register socket events
     events.register_socket_events(socketio)

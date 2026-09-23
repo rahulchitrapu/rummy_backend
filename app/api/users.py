@@ -42,7 +42,7 @@ def get_users():
         })
     except Exception as e:
         print("Error getting users:", e)
-        return jsonify({'error': 'Failed to get users'}), 500
+        return jsonify({'error_msg': 'Failed to get users'}), 500
 
 # POST /api/users/ - Create user
 @users_bp.route('/', methods=['POST'])
@@ -55,20 +55,20 @@ def create_user():
         
         # Check if all required fields are present
         if not name or not email or not password:
-            return jsonify({'error': 'Name, email, and password are required'}), 400
+            return jsonify({'error_msg': 'Name, email, and password are required'}), 400
         
         # Simple validation
         if len(name) < 2:
-            return jsonify({'error': 'Name too short'}), 400
+            return jsonify({'error_msg': 'Name too short'}), 400
         if not validate_email(email):
-            return jsonify({'error': 'Invalid email'}), 400
+            return jsonify({'error_msg': 'Invalid email'}), 400
         if len(password) < 6:
-            return jsonify({'error': 'Password too short'}), 400
+            return jsonify({'error_msg': 'Password too short'}), 400
         
         # Check if user already exists
         existing_users = select_records('users', '*', {'email': email})
         if existing_users.data:
-            return jsonify({'error': 'User already exists'}), 409
+            return jsonify({'error_msg': 'User already exists'}), 409
         
         # Create user
         user_data = {
@@ -82,7 +82,7 @@ def create_user():
         new_user = result.data[0] if result.data else None
         
         if not new_user:
-            return jsonify({'error': 'Failed to create user'}), 500
+            return jsonify({'error_msg': 'Failed to create user'}), 500
         
         token = generate_token(new_user['id'])
         
@@ -97,7 +97,7 @@ def create_user():
         
     except Exception as e:
         print("Error creating user:", e)
-        return jsonify({'error': 'Failed to create user'}), 500
+        return jsonify({'error_msg': 'Failed to create user'}), 500
 
 # GET /api/users/<id> - Get single user
 @users_bp.route('/<user_id>', methods=['GET'])
@@ -107,7 +107,7 @@ def get_user(user_id):
         users = select_records('users', 'id,name,email,created_at', {'id': user_id})
         
         if not users.data:
-            return jsonify({'error': 'User not found'}), 404
+            return jsonify({'error_msg': 'User not found'}), 404
         
         user = users.data[0]
         
@@ -121,7 +121,7 @@ def get_user(user_id):
         })
         
     except Exception as e:
-        return jsonify({'error': 'Failed to get user'}), 500
+        return jsonify({'error_msg': 'Failed to get user'}), 500
 
 # PUT /api/users/<id> - Update user
 @users_bp.route('/<user_id>', methods=['PUT'])
@@ -130,7 +130,7 @@ def update_user(user_id):
         # Check if user exists
         existing_users = select_records('users', '*', {'id': user_id})
         if not existing_users.data:
-            return jsonify({'error': 'User not found'}), 404
+            return jsonify({'error_msg': 'User not found'}), 404
         
         data = request.get_json()
         update_fields = {}
@@ -140,11 +140,11 @@ def update_user(user_id):
         if 'email' in data and data['email'].strip():
             email = data['email'].strip().lower()
             if not validate_email(email):
-                return jsonify({'error': 'Invalid email'}), 400
+                return jsonify({'error_msg': 'Invalid email'}), 400
             update_fields['email'] = email
         if 'password' in data and data['password']:
             if len(data['password']) < 6:
-                return jsonify({'error': 'Password too short'}), 400
+                return jsonify({'error_msg': 'Password too short'}), 400
             update_fields['password'] = generate_password_hash(data['password'])
 
         if update_fields:
@@ -156,7 +156,7 @@ def update_user(user_id):
         return jsonify({'message': 'User updated', 'user': updated_record})
         
     except Exception as e:
-        return jsonify({'error': 'Failed to update user'}), 500
+        return jsonify({'error_msg': 'Failed to update user'}), 500
 
 # DELETE /api/users/<id> - Delete user
 @users_bp.route('/<user_id>', methods=['DELETE'])
@@ -165,7 +165,7 @@ def delete_user(user_id):
         # Check if user exists
         existing_users = select_records('users', '*', {'id': user_id})
         if not existing_users.data:
-            return jsonify({'error': 'User not found'}), 404
+            return jsonify({'error_msg': 'User not found'}), 404
         
         # Delete the user
         delete_record('users', {'id': user_id})
@@ -173,7 +173,7 @@ def delete_user(user_id):
         return jsonify({'message': 'User deleted'})
         
     except Exception as e:
-        return jsonify({'error': 'Failed to delete user'}), 500
+        return jsonify({'error_msg': 'Failed to delete user'}), 500
 
 # POST /api/users/login - Login
 @users_bp.route('/login', methods=['POST'])
@@ -184,13 +184,13 @@ def login():
         password = data.get('password', '')
         
         if not email or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
+            return jsonify({'error_msg': 'Email and password are required'}), 400
         
         # Find user by email
         users = select_records('users', '*', {'email': email})
         
         if not users.data:
-            return jsonify({'error': 'Invalid credentials'}), 401
+            return jsonify({'error_msg': 'Invalid credentials'}), 401
         
         user = users.data[0]
         
@@ -210,4 +210,36 @@ def login():
         
     except Exception as e:
         return jsonify({'message': 'Login failed'}), 500
+
+# POST /api/users/reset-password - Reset password
+@users_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+
+        if not email or not password:
+            return jsonify({'error_msg': 'Email and password are required'}), 400
+
+        if not validate_email(email):
+            return jsonify({'error_msg': 'Invalid email'}), 400
+
+        if len(password) < 6:
+            return jsonify({'error_msg': 'Password too short'}), 400
+
+        # Find user by email
+        users = select_records('users', '*', {'email': email})
+
+        if not users.data:
+            return jsonify({'error_msg': 'User not found'}), 404
+
+        user = users.data[0]
+
+        update_record('users', {'password': generate_password_hash(password)}, {'id': user['id']})
+
+        return jsonify({'message': 'Password reset successful'})
+
+    except Exception as e:
+        return jsonify({'error_msg': 'Failed to reset password'}), 500
 
